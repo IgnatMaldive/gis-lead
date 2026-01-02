@@ -1,0 +1,7 @@
+{
+  "name": "LeadGenius Maps Command Center",
+  "description": "A high-tech tactical dashboard for scouting local business leads, identifying market gaps, and generating AI-powered sales pitches using Google Maps and Search grounding.",
+  "requestFramePermissions": [
+    "geolocation"
+  ]
+}
