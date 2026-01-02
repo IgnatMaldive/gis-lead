@@ -1,15 +1,20 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageSquare, Send, X, Bot, User, Minimize2, Maximize2 } from 'lucide-react';
+import { MessageSquare, Send, X, Bot, User, Minimize2, Maximize2, Terminal } from 'lucide-react';
 import { chatWithGenius } from '../geminiService';
 import { ChatMessage } from '../types';
+import * as db from '../db';
 
-const ChatBot: React.FC = () => {
+interface ChatBotProps {
+  onIntelligenceUpdate?: () => void;
+}
+
+const ChatBot: React.FC<ChatBotProps> = ({ onIntelligenceUpdate }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isMinimized, setIsMinimized] = useState(false);
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<ChatMessage[]>([
-    { role: 'assistant', content: 'Tactical strategist online. How can I help you refine your scout results or develop a pitch strategy?' }
+    { role: 'assistant', content: 'Tactical strategist online. I can manage the lead database, write proposals, and store intelligence notes for any target.' }
   ]);
   const [isLoading, setIsLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -32,10 +37,64 @@ const ChatBot: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const response = await chatWithGenius(messages, userMessage);
-      setMessages(prev => [...prev, { role: 'assistant', content: response }]);
+      // Step 1: Send to Gemini
+      let response = await chatWithGenius(messages, userMessage);
+
+      // Step 2: Handle Tool Calls (if any)
+      if (response.functionCalls && response.functionCalls.length > 0) {
+        const ai = new (await import('@google/genai')).GoogleGenAI({ apiKey: process.env.API_KEY });
+        const chat = ai.chats.create({
+          model: 'gemini-3-pro-preview',
+        });
+        
+        const functionResponses = [];
+
+        for (const fc of response.functionCalls) {
+          let result: any = "ok";
+          
+          if (fc.name === 'get_leads') {
+            const leads = db.getAllLeads();
+            result = fc.args.filter_saved ? leads.filter(l => (l as any).isSaved) : leads;
+          } else if (fc.name === 'get_lead_details') {
+            result = db.getLeadById(fc.args.id) || "Lead not found";
+          } else if (fc.name === 'update_lead_intelligence') {
+            await db.updateLeadIntelligence(fc.args.id, {
+              notes: fc.args.notes,
+              proposal: fc.args.proposal,
+              pitchAngle: fc.args.pitchAngle
+            });
+            result = { status: "success", message: "Intelligence profile updated in SQLite." };
+            onIntelligenceUpdate?.();
+          }
+
+          functionResponses.push({
+            id: fc.id,
+            name: fc.name,
+            response: { result }
+          });
+        }
+
+        // Step 3: Send responses back to get the final conversational reply
+        // We use a fresh chat session or sendMessage to conclude the turn
+        // For simplicity in this demo environment, we'll re-query with the context of the tool result
+        const finalResponse = await ai.models.generateContent({
+          model: 'gemini-3-pro-preview',
+          contents: [
+            { role: 'user', parts: [{ text: userMessage }] },
+            { role: 'model', parts: response.candidates[0].content.parts },
+            { role: 'user', parts: [{ 
+              functionResponse: functionResponses[0] // Simplified for one call
+            }] }
+          ]
+        });
+
+        setMessages(prev => [...prev, { role: 'assistant', content: finalResponse.text || "Database updated successfully." }]);
+      } else {
+        setMessages(prev => [...prev, { role: 'assistant', content: response.text || "Acknowledged." }]);
+      }
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'assistant', content: "Error connecting to strategic network. Check your link." }]);
+      console.error(error);
+      setMessages(prev => [...prev, { role: 'assistant', content: "Tactical link severed. Intelligence update failed." }]);
     } finally {
       setIsLoading(false);
     }
@@ -48,7 +107,7 @@ const ChatBot: React.FC = () => {
         className="fixed bottom-6 right-6 z-[3000] w-14 h-14 bg-indigo-600 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(79,70,229,0.5)] hover:bg-indigo-500 transition-all transform hover:scale-110 active:scale-95 group"
       >
         <MessageSquare className="w-6 h-6 text-white group-hover:rotate-12 transition-transform" />
-        <div className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 border-2 border-slate-950 rounded-full animate-pulse"></div>
+        <div className="absolute -top-1 -right-1 w-4 h-4 bg-emerald-500 border-2 border-slate-950 rounded-full animate-pulse"></div>
       </button>
     );
   }
@@ -58,8 +117,8 @@ const ChatBot: React.FC = () => {
       {/* Header */}
       <div className="p-4 bg-slate-800 flex justify-between items-center border-b border-slate-700">
         <div className="flex items-center gap-2">
-          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
-          <span className="font-bold text-sm tracking-tight">Genius <span className="text-indigo-400">Strategist</span></span>
+          <Terminal className="w-4 h-4 text-indigo-400" />
+          <span className="font-bold text-sm tracking-tight uppercase font-mono">Core <span className="text-indigo-400">Strategist</span></span>
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => setIsMinimized(!isMinimized)} className="p-1 hover:bg-slate-700 rounded transition-colors">
@@ -74,14 +133,14 @@ const ChatBot: React.FC = () => {
       {!isMinimized && (
         <>
           {/* Messages */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 font-sans text-sm">
             {messages.map((msg, i) => (
               <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                 <div className={`flex gap-2 max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : ''}`}>
                   <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${msg.role === 'user' ? 'bg-indigo-600' : 'bg-slate-800 border border-slate-700'}`}>
-                    {msg.role === 'user' ? <User className="w-4 h-4" /> : <Bot className="w-4 h-4 text-indigo-400" />}
+                    {msg.role === 'user' ? <User className="w-4 h-4 text-white" /> : <Bot className="w-4 h-4 text-indigo-400" />}
                   </div>
-                  <div className={`p-3 rounded-2xl text-sm ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-none'}`}>
+                  <div className={`p-3 rounded-2xl ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-tr-none shadow-lg' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-tl-none'}`}>
                     {msg.content}
                   </div>
                 </div>
@@ -94,9 +153,9 @@ const ChatBot: React.FC = () => {
                     <Bot className="w-4 h-4 text-indigo-400" />
                   </div>
                   <div className="p-3 rounded-2xl bg-slate-800 border border-slate-700 rounded-tl-none flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce"></div>
-                    <div className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce delay-75"></div>
-                    <div className="w-1.5 h-1.5 bg-slate-500 rounded-full animate-bounce delay-150"></div>
+                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce"></div>
+                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce delay-75"></div>
+                    <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full animate-bounce delay-150"></div>
                   </div>
                 </div>
               </div>
@@ -110,15 +169,15 @@ const ChatBot: React.FC = () => {
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask for strategy advice..."
-              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              placeholder="Store docs, generate pitch..."
+              className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-indigo-500 placeholder:text-slate-600"
             />
             <button
               type="submit"
               disabled={isLoading || !input.trim()}
-              className="bg-indigo-600 hover:bg-indigo-500 p-2 rounded-xl transition-colors disabled:opacity-50"
+              className="bg-indigo-600 hover:bg-indigo-500 p-2 rounded-xl transition-colors disabled:opacity-50 shadow-lg shadow-indigo-600/20"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-4 h-4 text-white" />
             </button>
           </form>
         </>

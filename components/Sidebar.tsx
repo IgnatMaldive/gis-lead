@@ -11,6 +11,7 @@ interface SidebarProps {
   onToggleSave: (lead: BusinessLead) => void;
   loading: boolean;
   onFocusLead: (lead: BusinessLead) => void;
+  onViewReport: (lead: BusinessLead) => void;
   searchParams: SearchState;
   setSearchParams: (params: SearchState) => void;
 }
@@ -21,7 +22,8 @@ const Sidebar: React.FC<SidebarProps> = ({
   savedLeads,
   onToggleSave,
   loading, 
-  onFocusLead, 
+  onFocusLead,
+  onViewReport,
   searchParams, 
   setSearchParams 
 }) => {
@@ -190,6 +192,7 @@ const Sidebar: React.FC<SidebarProps> = ({
                 key={lead.id} 
                 lead={lead} 
                 onFocus={onFocusLead} 
+                onViewReport={onViewReport}
                 isSaved={savedLeads.some(sl => sl.id === lead.id)}
                 onToggleSave={onToggleSave}
               />

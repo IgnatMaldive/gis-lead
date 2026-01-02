@@ -1,17 +1,18 @@
 
 import React, { useState } from 'react';
 import { BusinessLead, CompetitorReport } from '../types';
-import { Star, MapPin, Globe, ShieldAlert, Target, Sparkles, ChevronRight, Bookmark, BookmarkCheck, BarChart3, Loader2, X, AlertTriangle } from 'lucide-react';
+import { Star, MapPin, Globe, ShieldAlert, Target, Sparkles, ChevronRight, Bookmark, BookmarkCheck, BarChart3, Loader2, X, AlertTriangle, Maximize2 } from 'lucide-react';
 import { analyzeCompetitor } from '../geminiService';
 
 interface BusinessCardProps {
   lead: BusinessLead;
   onFocus: (lead: BusinessLead) => void;
+  onViewReport: (lead: BusinessLead) => void;
   isSaved?: boolean;
   onToggleSave?: (lead: BusinessLead) => void;
 }
 
-const BusinessCard: React.FC<BusinessCardProps> = ({ lead, onFocus, isSaved, onToggleSave }) => {
+const BusinessCard: React.FC<BusinessCardProps> = ({ lead, onFocus, onViewReport, isSaved, onToggleSave }) => {
   const [showCompetitorInput, setShowCompetitorInput] = useState(false);
   const [competitorUrl, setCompetitorUrl] = useState('');
   const [report, setReport] = useState<CompetitorReport | null>(null);
@@ -32,6 +33,11 @@ const BusinessCard: React.FC<BusinessCardProps> = ({ lead, onFocus, isSaved, onT
   const handleToggleSave = (e: React.MouseEvent) => {
     e.stopPropagation();
     onToggleSave?.(lead);
+  };
+
+  const handleViewReport = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onViewReport(lead);
   };
 
   const handleAnalyzeCompetitor = async (e: React.FormEvent) => {
@@ -62,6 +68,13 @@ const BusinessCard: React.FC<BusinessCardProps> = ({ lead, onFocus, isSaved, onT
           {lead.name}
         </h3>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={handleViewReport}
+            className="p-1.5 rounded-lg text-slate-500 hover:text-indigo-400 hover:bg-indigo-400/10 transition-all"
+            title="Visualize Full Report"
+          >
+            <Maximize2 className="w-4 h-4" />
+          </button>
           <button 
             onClick={handleToggleSave}
             className={`p-1.5 rounded-lg transition-all ${isSaved ? 'text-violet-400 bg-violet-400/10' : 'text-slate-500 hover:text-indigo-400 hover:bg-indigo-400/10'}`}

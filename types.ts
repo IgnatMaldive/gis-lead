@@ -16,6 +16,9 @@ export interface BusinessLead {
   hasChatbot: boolean;
   hasOnlineBooking: boolean;
   sentiment: 'positive' | 'neutral' | 'negative';
+  // AI Generated Intelligence Docs
+  notes?: string;
+  proposal?: string;
 }
 
 export interface SearchState {

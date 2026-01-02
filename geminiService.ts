@@ -1,8 +1,9 @@
 
-import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
+import { GoogleGenAI, Type, GenerateContentResponse, FunctionDeclaration } from "@google/genai";
 import { BusinessLead, SearchState, CompetitorReport } from "./types";
 
 export const scoutLeads = async (params: SearchState): Promise<BusinessLead[]> => {
+  // Always create new instance to use latest API Key
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
   // 1. Find businesses using Gemini 2.5 Flash with Maps Grounding
@@ -120,15 +121,58 @@ export const analyzeCompetitor = async (lead: BusinessLead, competitorUrl: strin
   return JSON.parse(response.text || "{}");
 };
 
+// --- CHAT TOOLS ---
+
+export const getLeadsTool: FunctionDeclaration = {
+  name: 'get_leads',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'List current leads stored in the local intelligence database.',
+    properties: {
+      filter_saved: { type: Type.BOOLEAN, description: 'Only show saved leads.' }
+    }
+  }
+};
+
+export const updateLeadIntelligenceTool: FunctionDeclaration = {
+  name: 'update_lead_intelligence',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Save new intelligence, documents, or tactical pitch updates for a specific lead.',
+    properties: {
+      id: { type: Type.STRING, description: 'The target business ID.' },
+      notes: { type: Type.STRING, description: 'Detailed intelligence notes to append.' },
+      proposal: { type: Type.STRING, description: 'A structured sales proposal document.' },
+      pitchAngle: { type: Type.STRING, description: 'Update the core tactical pitch angle.' }
+    },
+    required: ['id']
+  }
+};
+
+export const getLeadDetailsTool: FunctionDeclaration = {
+  name: 'get_lead_details',
+  parameters: {
+    type: Type.OBJECT,
+    description: 'Retrieve full details, history, and stored docs for a specific target lead.',
+    properties: {
+      id: { type: Type.STRING, description: 'The target business ID.' }
+    },
+    required: ['id']
+  }
+};
+
 export const chatWithGenius = async (history: {role: string, content: string}[], message: string) => {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const chat = ai.chats.create({
     model: 'gemini-3-pro-preview',
     config: {
-      systemInstruction: "You are the LeadGenius AI assistant, part of a high-tech Tactical Command Center. You help users understand market opportunities, explain business gaps, and refine sales strategies for local lead generation.",
+      systemInstruction: "You are the LeadGenius AI strategist. You have direct read/write access to the local Tactical SQLite Database via tools. You help users manage their lead bank, generate complex sales documentation, and refine outreach strategies. When a user asks to save something or 'write a proposal' for a lead, use the update_lead_intelligence tool. Always check existing leads using get_leads if you are unsure who the target is.",
+      tools: [{
+        functionDeclarations: [getLeadsTool, updateLeadIntelligenceTool, getLeadDetailsTool]
+      }]
     },
   });
 
   const response = await chat.sendMessage({ message });
-  return response.text;
+  return response;
 };
